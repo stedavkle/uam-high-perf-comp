@@ -6,20 +6,27 @@
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
+#include <x86intrin.h>
 
-static inline void getRGB(uint8_t *im, int width, int height, int nchannels, int x, int y, int *r, int *g, int *b)
+static inline void getRGB(uint8_t *im, int width, int height, int nchannels, int x, int y, __m256i *rgba8)
 {
 
     unsigned char *offset = im + (x + width * y) * nchannels;
-    *r = offset[0];
-    *g = offset[1];
-    *b = offset[2];
+    int *offset_i = &offset
+    // *r = offset[0];
+    // *g = offset[1];
+    // *b = offset[2];
+    
+    // only at AVX-512 IS
+    //*rgba8 = _mm256_load_epi32(&offset);
+
+    *rgba8 = _mm256_maskload_epi32(offset_i, _mm256_set_epi32(0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff));
 }
 
 int main(int nargs, char **argv)
 {
     int width, height, nchannels;
-    struct timeval fin, ini;
+    struct timeval fin,ini;
 
     if (nargs < 2)
     {
@@ -74,13 +81,30 @@ int main(int nargs, char **argv)
 
         gettimeofday(&ini,NULL);
         // RGB to grey scale
-        int r, g, b;
+        __m256i rgba8;
+        __m512d rgbvec = _mm512_broadcast_f64x4(_mm256_set_pd(0.2989, 0.5870, 0.1140, 0.0));
+        __m512d rgba8_dp;
+        __m512d result_dp;
+        __m256i result;
+
         for (int i = 0; i < width; i++)
         {
             for (int j = 0; j < height; j++)
             {
-                getRGB(rgb_image, width, height, 4, i, j, &r, &g, &b);
-                grey_image[j * width + i] = (int)(0.2989 * r + 0.5870 * g + 0.1140 * b);
+                // get vector of values from 8 pixels
+                getRGB(rgb_image, width, height, 4, i, j, &rgba8);
+
+                // convert to double precision
+                rgba8_dp = _mm512_cvtepi32_pd(rgba8);
+
+                // multiply rgbvec by rgba8_dp
+                result_dp = _mm512_mul_pd(rgbvec, rgba8_dp);
+
+                // convert back to integer
+                result = _mm512_cvtpd_epi32(result_dp);
+
+                // store the values of 4 pixels
+                _mm256_store_epi32(&grey_image[j * width + i], result);
             }
         }
 
