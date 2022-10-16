@@ -2,7 +2,7 @@
     CPU Model:
         Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz
     SIMD ISA:
-        mmx sse sse2 ssse3 sse4_1 sse4_4 fma avx avx2 adx aes bmi1 bmi2 clfushopt fsgsbase fxsr invpcid monitor movbe mpx pclmulqdq popcnt rdrand rdseed rdtscp sxavec xsaveopt
+        mmx sse sse2 ssse3 sse4_1 sse4_4 avx avx2 fma adx aes bmi1 bmi2 clfushopt fsgsbase fxsr invpcid monitor movbe mpx pclmulqdq popcnt rdrand rdseed rdtscp sxavec xsaveopt
 3.
     GCC Version:x
         gcc (GCC) 12.2.1 20220819 (Red Hat 12.2.1-2)

@@ -1,3 +1,4 @@
+#include <emmintrin.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <math.h>
@@ -8,19 +9,13 @@
 #include "stb_image_write.h"
 #include <x86intrin.h>
 
-static inline void getRGB(uint8_t *im, int width, int height, int nchannels, int x, int y, __m256i *rgba8)
+static inline void getRGB(uint8_t *im, int width, int height, int nchannels, int x, int y, __m128i *datal, __m128i *datah)
 {
-
     unsigned char *offset = im + (x + width * y) * nchannels;
-    int *offset_i = &offset
-    // *r = offset[0];
-    // *g = offset[1];
-    // *b = offset[2];
-    
-    // only at AVX-512 IS
-    //*rgba8 = _mm256_load_epi32(&offset);
 
-    *rgba8 = _mm256_maskload_epi32(offset_i, _mm256_set_epi32(0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff));
+    
+    *datal = _mm_loadl_epi64((__m128i *)offset);
+    *datah = _mm_loadl_epi64((__m128i *)(offset + 8));
 }
 
 int main(int nargs, char **argv)
@@ -81,30 +76,45 @@ int main(int nargs, char **argv)
 
         gettimeofday(&ini,NULL);
         // RGB to grey scale
-        __m256i rgba8;
-        __m512d rgbvec = _mm512_broadcast_f64x4(_mm256_set_pd(0.2989, 0.5870, 0.1140, 0.0));
-        __m512d rgba8_dp;
-        __m512d result_dp;
-        __m256i result;
+        __m128i datal, datah; 
+        __m256i datal32, datah32; 
+        __m256 datalf, datahf;
+        __m256 weights = _mm256_set_ps(0.2989, 0.5870, 0.1140, 0, 0.2989, 0.5870, 0.1140, 0);
+        __m256 result;
+        __m128i result_final;
 
-        for (int i = 0; i < width; i++)
+        for (int i = 0; i < width; i+=4)
         {
             for (int j = 0; j < height; j++)
             {
-                // get vector of values from 8 pixels
-                getRGB(rgb_image, width, height, 4, i, j, &rgba8);
+                // get vector of values from  pixels
+                getRGB(rgb_image, width, height, 4, i, j, &datal, &datah);
+                // convert 8 bit to 32 bit - 0 extend all rgba valiues
+                datal32 = _mm256_cvtepu8_epi32(datal);
+                datah32 = _mm256_cvtepu8_epi32(datah);
+                // convert to float
+                datalf = _mm256_cvtepi32_ps(datal32);
+                datahf = _mm256_cvtepi32_ps(datah32);
+                // multiply by weights
+                datalf = _mm256_mul_ps(datalf, weights);
+                datahf = _mm256_mul_ps(datahf, weights);
+                
+                result = _mm256_hadd_ps(datalf, datahf);
+                result = _mm256_hadd_ps(result, result);
 
-                // convert to double precision
-                rgba8_dp = _mm512_cvtepi32_pd(rgba8);
+                // perm index 0 4 1 5
+                // permutate
+                result = _mm256_permutevar8x32_ps(result, _mm256_set_epi32(0, 4, 1, 5, 0, 0, 0, 0));
+                
 
-                // multiply rgbvec by rgba8_dp
-                result_dp = _mm512_mul_pd(rgbvec, rgba8_dp);
-
-                // convert back to integer
-                result = _mm512_cvtpd_epi32(result_dp);
-
-                // store the values of 4 pixels
-                _mm256_store_epi32(&grey_image[j * width + i], result);
+                result_final = _mm_cvtps_epi32(_mm256_extractf128_ps(result, 1));
+        
+                // store result_final in grey_image at position i,j
+                grey_image[i + width * j] = _mm_extract_epi8(result_final, 0);
+                grey_image[i + width * j + 1] = _mm_extract_epi8(result_final, 4);
+                grey_image[i + width * j + 2] = _mm_extract_epi8(result_final, 8);
+                grey_image[i + width * j + 3] = _mm_extract_epi8(result_final, 12);
+                
             }
         }
 
@@ -113,7 +123,7 @@ int main(int nargs, char **argv)
 
         gettimeofday(&fin,NULL);
 
-	printf("Tiempo: %f\n", ((fin.tv_sec*1000000+fin.tv_usec)-(ini.tv_sec*1000000+ini.tv_usec))*1.0/1000000.0);
+	    printf("Tiempo: %f\n", ((fin.tv_sec*1000000+fin.tv_usec)-(ini.tv_sec*1000000+ini.tv_usec))*1.0/1000000.0);
         free(grey_image_filename);
     }
 }
