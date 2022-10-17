@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
         // Perform sum[0]+sum[1], sum[2]+sum[3], sum[2]+sum[3], 0+0
         sum = _mm256_hadd_pd (sum, ymm);                // Horizontally add adjacent pairs of double-precision (64-bit) floating-point elements in a and b.
         // Perform sum[0]+sum[1]+sum[2]+sum[3]…
-        sum =   (sum, sum);
+        sum = _mm256_hadd_pd (sum, sum);
         c = sum[0];
         // get current system time
         gettimeofday(&end, NULL);
